@@ -40,9 +40,12 @@ class PyPIStatsClient:
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-        # Simple in-memory cache
-        self._cache: dict[str, dict[str, Any]] = {}
+        # Simple in-memory cache with size limit
+        from collections import OrderedDict
+
+        self._cache: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
         self._cache_ttl = 3600  # 1 hour (data updates daily)
+        self._cache_size_limit = 100
 
         # HTTP client configuration
         self._client = httpx.AsyncClient(
@@ -200,6 +203,8 @@ class PyPIStatsClient:
             # Cache the result
             import time
 
+            if len(self._cache) >= self._cache_size_limit:
+                self._cache.popitem(last=False)
             self._cache[cache_key] = {"data": data, "timestamp": time.time()}
 
             return data

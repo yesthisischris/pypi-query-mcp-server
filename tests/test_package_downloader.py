@@ -2,6 +2,7 @@
 
 import shutil
 import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, mock_open, patch
 
 import pytest
@@ -223,6 +224,39 @@ class TestPackageDownloader:
                 )
 
                 assert result["python_version"] == "3.10"
+
+    @pytest.mark.asyncio
+    async def test_download_file_sanitizes_filename(self, downloader):
+        """Ensure filename is sanitized to prevent path traversal."""
+        file_info = {
+            "filename": "../../evil.whl",
+            "url": "https://example.com/evil.whl",
+            "digests": {"sha256": "a" * 64},
+            "size": 4,
+        }
+        with patch("httpx.AsyncClient") as mock_httpx_class:
+            mock_client = AsyncMock()
+            mock_httpx_class.return_value.__aenter__.return_value = mock_client
+            mock_response = AsyncMock()
+            mock_response.raise_for_status.return_value = None
+            async def _aiter_bytes(chunk_size=8192):
+                yield b"test"
+            mock_response.aiter_bytes = _aiter_bytes
+
+            from contextlib import asynccontextmanager
+
+            @asynccontextmanager
+            async def fake_stream(*args, **kwargs):
+                yield mock_response
+
+            mock_client.stream = fake_stream
+
+            with patch("builtins.open", mock_open()) as m:
+                result = await downloader._download_file(file_info)
+
+                assert Path(result["file_path"]).parent == Path(downloader.download_dir).resolve()
+                assert result["filename"] == "evil.whl"
+                m.assert_called()
 
     @pytest.mark.asyncio
     async def test_download_package_with_dependencies_function(self, temp_download_dir):

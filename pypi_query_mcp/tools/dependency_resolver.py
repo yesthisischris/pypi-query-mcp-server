@@ -18,6 +18,8 @@ class DependencyResolver:
     """Resolves package dependencies recursively."""
 
     def __init__(self, max_depth: int = 10):
+        if max_depth < 1 or max_depth > 10:
+            raise ValueError("max_depth must be between 1 and 10")
         self.max_depth = max_depth
         self.parser = DependencyParser()
         self.resolved_cache: dict[str, dict[str, Any]] = {}
@@ -45,7 +47,9 @@ class DependencyResolver:
         if not package_name or not package_name.strip():
             raise InvalidPackageNameError(package_name)
 
-        max_depth = max_depth or self.max_depth
+        max_depth = self.max_depth if max_depth is None else max_depth
+        if max_depth < 1 or max_depth > 10:
+            raise ValueError("max_depth must be between 1 and 10")
         include_extras = include_extras or []
 
         logger.info(
