@@ -224,14 +224,21 @@ class PackageDownloader:
 
         url = file_info.get("url")
         filename = file_info.get("filename")
-        expected_md5 = file_info.get("md5_digest")
+        expected_sha256 = (
+            file_info.get("digests", {}).get("sha256")
+            or file_info.get("sha256_digest")
+        )
         expected_size = file_info.get("size")
 
         if not url or not filename:
             raise ValueError("Invalid file info: missing URL or filename")
 
-        # Create package-specific directory
-        file_path = self.download_dir / filename
+        # Sanitize filename to prevent path traversal
+        safe_name = Path(filename).name
+        file_path = (self.download_dir / safe_name).resolve()
+        download_dir_resolved = self.download_dir.resolve()
+        if not str(file_path).startswith(str(download_dir_resolved)):
+            raise ValueError("Invalid filename")
 
         logger.info(f"Downloading {filename} from {url}")
 
@@ -241,22 +248,22 @@ class PackageDownloader:
 
                 # Download with progress tracking
                 downloaded_size = 0
-                md5_hash = hashlib.md5()
+                sha256_hash = hashlib.sha256()
 
                 with open(file_path, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         f.write(chunk)
                         downloaded_size += len(chunk)
                         if verify_checksums:
-                            md5_hash.update(chunk)
+                            sha256_hash.update(chunk)
 
         # Verify download
         verification_result = {}
-        if verify_checksums and expected_md5:
-            actual_md5 = md5_hash.hexdigest()
-            verification_result["md5_match"] = actual_md5 == expected_md5
-            verification_result["expected_md5"] = expected_md5
-            verification_result["actual_md5"] = actual_md5
+        if verify_checksums and expected_sha256:
+            actual_sha256 = sha256_hash.hexdigest()
+            verification_result["sha256_match"] = actual_sha256 == expected_sha256
+            verification_result["expected_sha256"] = expected_sha256
+            verification_result["actual_sha256"] = actual_sha256
 
         if expected_size:
             verification_result["size_match"] = downloaded_size == expected_size
@@ -264,7 +271,7 @@ class PackageDownloader:
             verification_result["actual_size"] = downloaded_size
 
         return {
-            "filename": filename,
+            "filename": safe_name,
             "file_path": str(file_path),
             "downloaded_size": downloaded_size,
             "verification": verification_result,

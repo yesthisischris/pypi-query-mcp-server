@@ -123,6 +123,27 @@ class TestDependencyResolver:
 
             assert result["summary"]["max_depth"] <= 1
 
+    def test_invalid_max_depth_init(self):
+        """Ensure invalid max depth values raise errors on init."""
+        with pytest.raises(ValueError):
+            DependencyResolver(max_depth=0)
+        with pytest.raises(ValueError):
+            DependencyResolver(max_depth=11)
+
+    @pytest.mark.asyncio
+    async def test_invalid_max_depth_argument(self, resolver):
+        """Ensure invalid max depth values raise errors at runtime."""
+        with patch("pypi_query_mcp.core.PyPIClient") as mock_client_class:
+            mock_client = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_client
+            mock_client.get_package_info.return_value = {
+                "info": {"name": "test", "version": "1.0.0", "requires_dist": []}
+            }
+            with pytest.raises(ValueError):
+                await resolver.resolve_dependencies("test", max_depth=0)
+            with pytest.raises(ValueError):
+                await resolver.resolve_dependencies("test", max_depth=11)
+
     @pytest.mark.asyncio
     async def test_resolve_package_dependencies_function(self):
         """Test the standalone resolve_package_dependencies function."""
